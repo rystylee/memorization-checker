@@ -1,6 +1,16 @@
 import type { EvaluationResult } from './types';
-import { tokenize } from './tokenizer';
+import { tokenize, tokenizeWithPositions, type TokenPosition } from './tokenizer';
 import { findMatches } from './matcher';
+
+/**
+ * Extended evaluation result with position information
+ */
+export interface EvaluationResultWithPositions extends EvaluationResult {
+  referencePositions: TokenPosition[];
+  comparisonPositions: TokenPosition[];
+  referenceText: string;
+  comparisonText: string;
+}
 
 /**
  * Evaluates the similarity between reference and comparison texts
@@ -15,7 +25,7 @@ export function evaluate(
   comparisonText: string,
   k: number = 5
 ): EvaluationResult {
-  // Tokenize both texts
+  // Use legacy tokenize for backward compatibility
   const bookTokens = tokenize(referenceText);
   const genTokens = tokenize(comparisonText);
 
@@ -48,6 +58,66 @@ export function evaluate(
     longestMatchText,
     totalMatches,
     matches
+  };
+}
+
+/**
+ * Evaluates the similarity between reference and comparison texts with position tracking
+ *
+ * @param referenceText - The reference text (book/source text)
+ * @param comparisonText - The comparison text (generated/recall text)
+ * @param k - K-gram length for matching (default: 5)
+ * @returns Evaluation result with coverage score, matches, and position information
+ */
+export function evaluateWithPositions(
+  referenceText: string,
+  comparisonText: string,
+  k: number = 5
+): EvaluationResultWithPositions {
+  // Tokenize both texts with position tracking
+  const referenceResult = tokenizeWithPositions(referenceText);
+  const comparisonResult = tokenizeWithPositions(comparisonText);
+
+  const bookTokens = referenceResult.tokens;
+  const genTokens = comparisonResult.tokens;
+
+  // Handle edge cases
+  if (bookTokens.length === 0 || genTokens.length === 0) {
+    return {
+      coverageScore: 0,
+      longestMatchLength: 0,
+      longestMatchText: '',
+      totalMatches: 0,
+      matches: [],
+      referencePositions: referenceResult.positions,
+      comparisonPositions: comparisonResult.positions,
+      referenceText,
+      comparisonText
+    };
+  }
+
+  // Find all matches
+  const matches = findMatches(bookTokens, genTokens, k);
+
+  // Calculate coverage score
+  const coverageScore = calculateCoverageScore(matches, bookTokens.length);
+
+  // Find longest match
+  const { longestMatchLength, longestMatchText } = findLongestMatch(matches);
+
+  // Count matches with length >= k
+  const totalMatches = matches.filter(m => m.length >= k).length;
+
+  return {
+    coverageScore,
+    longestMatchLength,
+    longestMatchText,
+    totalMatches,
+    matches,
+    referencePositions: referenceResult.positions,
+    comparisonPositions: comparisonResult.positions,
+    referenceText,
+    comparisonText
   };
 }
 

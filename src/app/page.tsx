@@ -5,14 +5,14 @@ import { Header } from '@/components/Header';
 import { TextInput } from '@/components/TextInput';
 import { ResultDisplay } from '@/components/ResultDisplay';
 import { HighlightedText } from '@/components/HighlightedText';
-import { evaluate } from '@/lib/evaluator';
-import { generateReferenceHighlights, generateComparisonHighlights } from '@/lib/highlighter';
+import { evaluateWithPositions, type EvaluationResultWithPositions } from '@/lib/evaluator';
+import { generateReferenceHighlightsWithPositions, generateComparisonHighlightsWithPositions } from '@/lib/highlighter';
 import type { EvaluationResult, TextSegment } from '@/lib/types';
 
 export default function Home() {
   const [referenceText, setReferenceText] = useState('');
   const [comparisonText, setComparisonText] = useState('');
-  const [result, setResult] = useState<EvaluationResult | null>(null);
+  const [result, setResult] = useState<EvaluationResultWithPositions | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Debounced evaluation
@@ -25,7 +25,7 @@ export default function Home() {
     setIsProcessing(true);
     const timeoutId = setTimeout(() => {
       try {
-        const evaluationResult = evaluate(referenceText, comparisonText);
+        const evaluationResult = evaluateWithPositions(referenceText, comparisonText);
         setResult(evaluationResult);
       } catch (error) {
         console.error('Evaluation error:', error);
@@ -38,20 +38,28 @@ export default function Home() {
     return () => clearTimeout(timeoutId);
   }, [referenceText, comparisonText]);
 
-  // Generate highlights
+  // Generate highlights using position-based approach
   const referenceSegments: TextSegment[] = useMemo(() => {
     if (!result || result.matches.length === 0) {
       return [{ text: referenceText, isMatch: false }];
     }
-    return generateReferenceHighlights(referenceText, result.matches);
-  }, [referenceText, result]);
+    return generateReferenceHighlightsWithPositions(
+      result.referenceText,
+      result.referencePositions,
+      result.matches
+    );
+  }, [result]);
 
   const comparisonSegments: TextSegment[] = useMemo(() => {
     if (!result || result.matches.length === 0) {
       return [{ text: comparisonText, isMatch: false }];
     }
-    return generateComparisonHighlights(comparisonText, result.matches);
-  }, [comparisonText, result]);
+    return generateComparisonHighlightsWithPositions(
+      result.comparisonText,
+      result.comparisonPositions,
+      result.matches
+    );
+  }, [result]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">

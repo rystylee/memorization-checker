@@ -1,4 +1,20 @@
 /**
+ * Token position information
+ */
+export interface TokenPosition {
+  start: number; // Character position in original text
+  end: number;   // Character position in original text (exclusive)
+}
+
+/**
+ * Tokenization result with position information
+ */
+export interface TokenizeResult {
+  tokens: string[];
+  positions: TokenPosition[];
+}
+
+/**
  * Detects if text contains primarily Japanese characters
  */
 function isJapaneseText(text: string): boolean {
@@ -9,40 +25,77 @@ function isJapaneseText(text: string): boolean {
 
 /**
  * Tokenizes Japanese text into character-based tokens
- * Removes whitespace and punctuation
+ * Removes whitespace and punctuation, tracks original positions
  */
-function tokenizeJapanese(text: string): string[] {
-  // Remove whitespace and common punctuation
-  const cleaned = text.replace(/[\s\u3000、。「」『』（）・！？]/g, '');
+function tokenizeJapanese(text: string): TokenizeResult {
+  const tokens: string[] = [];
+  const positions: TokenPosition[] = [];
 
-  // Convert to array of characters
-  return Array.from(cleaned);
+  // Track position in original text
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    // Skip whitespace and common punctuation
+    if (/[\s\u3000、。「」『』（）・！？]/.test(char)) {
+      continue;
+    }
+
+    // Add token with its position in original text
+    tokens.push(char);
+    positions.push({ start: i, end: i + 1 });
+  }
+
+  return { tokens, positions };
 }
 
 /**
  * Tokenizes English text into word tokens
- * Matches behavior of Python's NLTK WordPunctTokenizer
+ * Matches behavior of Python's NLTK WordPunctTokenizer, tracks original positions
  */
-function tokenizeEnglish(text: string): string[] {
-  // Convert to lowercase
+function tokenizeEnglish(text: string): TokenizeResult {
+  const tokens: string[] = [];
+  const positions: TokenPosition[] = [];
+
+  // Convert to lowercase for tokenization
   const lowercased = text.toLowerCase();
 
-  // Extract word tokens using word boundary regex
-  const tokens = lowercased.match(/\b\w+\b/g) || [];
+  // Find all word tokens with their positions
+  const regex = /\b\w+\b/g;
+  let match;
 
-  // Filter to keep only tokens with alphanumeric characters
-  return tokens.filter(token => /[a-z0-9]/.test(token));
+  while ((match = regex.exec(lowercased)) !== null) {
+    const token = match[0];
+
+    // Filter to keep only tokens with alphanumeric characters
+    if (/[a-z0-9]/.test(token)) {
+      tokens.push(token);
+      positions.push({ start: match.index, end: match.index + token.length });
+    }
+  }
+
+  return { tokens, positions };
 }
 
 /**
  * Tokenizes text into an array of tokens (auto-detects language)
+ * Legacy function for backward compatibility
  *
  * @param text - The input text to tokenize
  * @returns Array of tokens (characters for Japanese, words for English)
  */
 export function tokenize(text: string): string[] {
+  return tokenizeWithPositions(text).tokens;
+}
+
+/**
+ * Tokenizes text with position tracking (auto-detects language)
+ *
+ * @param text - The input text to tokenize
+ * @returns TokenizeResult with tokens and their positions in original text
+ */
+export function tokenizeWithPositions(text: string): TokenizeResult {
   if (!text || text.trim().length === 0) {
-    return [];
+    return { tokens: [], positions: [] };
   }
 
   // Auto-detect language and use appropriate tokenizer

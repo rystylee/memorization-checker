@@ -1,5 +1,5 @@
 import type { Match, TextSegment } from './types';
-import { tokenize } from './tokenizer';
+import { tokenize, tokenizeWithPositions, type TokenPosition } from './tokenizer';
 
 /**
  * Detects if text contains primarily Japanese characters
@@ -7,6 +7,58 @@ import { tokenize } from './tokenizer';
 function isJapaneseText(text: string): boolean {
   const japanesePattern = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
   return japanesePattern.test(text);
+}
+
+/**
+ * Generates highlighted segments using position mapping
+ * This approach directly maps token positions to character positions
+ */
+function generateSegmentsWithPositions(
+  text: string,
+  positions: TokenPosition[],
+  tokenToMatch: Map<number, number>
+): TextSegment[] {
+  if (positions.length === 0) {
+    return [{ text, isMatch: false }];
+  }
+
+  const segments: TextSegment[] = [];
+  let currentPos = 0;
+
+  // Create character-level match map
+  const charToMatch = new Map<number, number>();
+  for (let tokenIdx = 0; tokenIdx < positions.length; tokenIdx++) {
+    const matchIdx = tokenToMatch.get(tokenIdx);
+    if (matchIdx !== undefined) {
+      const pos = positions[tokenIdx];
+      for (let charPos = pos.start; charPos < pos.end; charPos++) {
+        charToMatch.set(charPos, matchIdx);
+      }
+    }
+  }
+
+  // Build segments by scanning through the text
+  let segmentStart = 0;
+  let currentMatchIndex: number | undefined = charToMatch.get(0);
+
+  for (let i = 1; i <= text.length; i++) {
+    const nextMatchIndex = i < text.length ? charToMatch.get(i) : undefined;
+
+    // When match status changes, create a segment
+    if (nextMatchIndex !== currentMatchIndex) {
+      const segmentText = text.substring(segmentStart, i);
+      segments.push({
+        text: segmentText,
+        isMatch: currentMatchIndex !== undefined,
+        matchIndex: currentMatchIndex
+      });
+
+      segmentStart = i;
+      currentMatchIndex = nextMatchIndex;
+    }
+  }
+
+  return segments.length > 0 ? segments : [{ text, isMatch: false }];
 }
 
 /**
@@ -189,4 +241,62 @@ export function generateComparisonHighlights(
   } else {
     return generateEnglishSegments(text, tokens, tokenToMatch);
   }
+}
+
+/**
+ * Generates highlighted segments for the reference text using position mapping
+ * This is the improved version that correctly handles punctuation and whitespace
+ *
+ * @param text - Original reference text
+ * @param positions - Token position information
+ * @param matches - Array of matches found in the text
+ * @returns Array of text segments with highlighting info
+ */
+export function generateReferenceHighlightsWithPositions(
+  text: string,
+  positions: TokenPosition[],
+  matches: Match[]
+): TextSegment[] {
+  if (positions.length === 0) {
+    return [{ text, isMatch: false }];
+  }
+
+  // Create a map of token indices to match indices
+  const tokenToMatch = new Map<number, number>();
+  matches.forEach((match, idx) => {
+    for (let i = match.bookStart; i < match.bookEnd; i++) {
+      tokenToMatch.set(i, idx);
+    }
+  });
+
+  return generateSegmentsWithPositions(text, positions, tokenToMatch);
+}
+
+/**
+ * Generates highlighted segments for the comparison text using position mapping
+ * This is the improved version that correctly handles punctuation and whitespace
+ *
+ * @param text - Original comparison text
+ * @param positions - Token position information
+ * @param matches - Array of matches found in the text
+ * @returns Array of text segments with highlighting info
+ */
+export function generateComparisonHighlightsWithPositions(
+  text: string,
+  positions: TokenPosition[],
+  matches: Match[]
+): TextSegment[] {
+  if (positions.length === 0) {
+    return [{ text, isMatch: false }];
+  }
+
+  // Create a map of token indices to match indices
+  const tokenToMatch = new Map<number, number>();
+  matches.forEach((match, idx) => {
+    for (let i = match.genStart; i < match.genEnd; i++) {
+      tokenToMatch.set(i, idx);
+    }
+  });
+
+  return generateSegmentsWithPositions(text, positions, tokenToMatch);
 }
